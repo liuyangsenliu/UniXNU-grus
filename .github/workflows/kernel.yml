@@ -189,6 +189,26 @@ jobs:
           ref: sirius/v2.0
           path: device/uboot/src
 
+      - name: Check out UniXNU (for the container sources)
+        uses: actions/checkout@v4
+        with:
+          repository: UniXNU/UniXNU
+          ref: main
+          path: unixnu
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build the xnu-linux toolchain container
+        uses: docker/build-push-action@v6
+        with:
+          context: unixnu/scripts/linux
+          file: device/containers/xnu-linux/Containerfile
+          tags: unixnu-xnu-linux:local
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
       - name: Build U-Boot boot-unixnu.img (in the toolchain container)
         run: |
           docker run --rm \
