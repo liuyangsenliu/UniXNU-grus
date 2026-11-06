@@ -138,11 +138,21 @@ jobs:
             '
 
       - name: Build payload
-        working-directory: unixnu
         if: contains(inputs.steps || 'kernel', 'payload') || contains(github.event.head_commit.message, 'payload')
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: ./unixnu build payload
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}:/work" -w /work \
+            -e GITHUB_TOKEN="$GITHUB_TOKEN" \
+            -e UNIXNU_DEVICE=/work/device \
+            unixnu-xnu-linux:local bash -lc '
+              set -euo pipefail
+              git config --global --add safe.directory "*"
+              dnf -y install -q dtc unifdef mtools >/dev/null 2>&1 || true
+              cd unixnu
+              ./unixnu build payload
+            '
 
       - name: Collect artifacts
         if: always()
