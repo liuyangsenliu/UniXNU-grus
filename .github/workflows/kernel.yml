@@ -17,7 +17,9 @@ on:
       unixnu_ref:
         description: UniXNU ref to build with
         required: false
-        default: "main"
+        # Pinned to the last upstream state known-good with sirius CI (2026-10-27);
+        # later main force-pushed the ArmCpu submodule pin away ("not our ref").
+        default: "120067ccc43ebb5e76ec62c9219a48c897052838"
       steps:
         description: Steps to build
         type: choice
@@ -63,7 +65,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: UniXNU/UniXNU
-          ref: ${{ inputs.unixnu_ref || 'main' }}
+          ref: ${{ inputs.unixnu_ref || '120067ccc43ebb5e76ec62c9219a48c897052838' }}
           path: unixnu
           persist-credentials: false
 
