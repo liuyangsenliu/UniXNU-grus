@@ -203,7 +203,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: unixnu/scripts/linux
-          file: device/containers/xnu-linux/Containerfile
+          file: containers/xnu-linux/Containerfile
           tags: unixnu-xnu-linux:local
           load: true
           cache-from: type=gha
@@ -249,7 +249,7 @@ jobs:
               open(a.out, "wb").write(img)
               EOF
               chmod +x /usr/local/bin/mkbootimg
-              cd /work/device/uboot
+              cd /work/uboot
               HOSTCFLAGS="-I/tmp/osslshim" ENV_FILE="$PWD/unixnu-sirius.env" ./build.sh
             '
 
