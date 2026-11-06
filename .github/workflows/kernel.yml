@@ -79,11 +79,18 @@ jobs:
         with:
           python-version: "3.13"
 
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Build the xnu-linux toolchain container
-        run: |
-          docker build -t unixnu-xnu-linux:local \
-            -f device/containers/xnu-linux/Containerfile \
-            unixnu/scripts/linux
+        uses: docker/build-push-action@v6
+        with:
+          context: unixnu/scripts/linux
+          file: device/containers/xnu-linux/Containerfile
+          tags: unixnu-xnu-linux:local
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Select the device
         working-directory: unixnu
@@ -114,6 +121,7 @@ jobs:
             -e UNIXNU_DEVICE=/work/device \
             unixnu-xnu-linux:local bash -lc '
               set -euo pipefail
+              git config --global --add safe.directory "*"
               dnf -y install -q dtc unifdef mtools >/dev/null 2>&1 || true
               cd unixnu
               ./unixnu fetch
