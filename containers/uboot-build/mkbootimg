@@ -1,0 +1,25 @@
+#!/usr/bin/env python3
+"""Minimal Android boot image (v0 header) writer -- enough for the ABL
+RAM-boot / flash test of the UniXNU U-Boot image (kernel_offset 0x8000,
+pagesize 4096, no ramdisk/second/dtb)."""
+import sys, struct, argparse
+
+p = argparse.ArgumentParser()
+p.add_argument("--kernel", required=True)
+p.add_argument("-o", dest="out", required=True)
+p.add_argument("--kernel_offset", default="0x00008000")
+p.add_argument("--pagesize", type=int, default=4096)
+a = p.parse_args()
+
+k = open(a.kernel, "rb").read()
+page = a.pagesize
+ko = int(a.kernel_offset, 16)
+hdr = b"ANDROID!" + struct.pack("<10I", len(k), ko, 0, 0, 0, 0, 0, page, 0, 0)
+hdr += b"\0" * 16 + b"\0" * 512 + b"\0" * 32  # name, cmdline, id
+assert len(hdr) == 608
+
+img = hdr.ljust(page, b"\0") + k
+if len(img) % page:
+    img += b"\0" * (page - len(img) % page)
+open(a.out, "wb").write(img)
+print("wrote", a.out, len(img), "bytes")

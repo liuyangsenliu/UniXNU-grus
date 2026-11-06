@@ -216,47 +216,15 @@ jobs:
             unixnu-xnu-linux:local bash -lc '
               set -euo pipefail
               dnf install -y -q gcc-aarch64-linux-gnu bison flex bc swig openssl-devel >/dev/null
-              # Fedora 44 OpenSSL 3.5 dropped <openssl/engine.h>; three-prototype shim
-              mkdir -p /tmp/osslshim/openssl
-              cat > /tmp/osslshim/openssl/engine.h <<'"'"'EOF'"'"'
-              #ifndef OSSL_ENGINE_SHIM_H
-              #define OSSL_ENGINE_SHIM_H
-              typedef struct engine_st ENGINE;
-              typedef struct ui_method_st UI_METHOD;
-              typedef int (*ENGINE_LOAD_KEY_PTR)(ENGINE *, const char *, UI_METHOD *ui_method, void *callback_data, char **pubkey, char **privkey);
-              #endif
-              EOF
-              # minimal mkbootimg (v0 header, enough for ABL RAM boot/flash test)
-              cat > /usr/local/bin/mkbootimg <<'"'"'EOF'"'"'
-              #!/usr/bin/env python3
-              import sys, struct, argparse
-              p = argparse.ArgumentParser()
-              p.add_argument("--kernel", required=True)
-              p.add_argument("-o", dest="out", required=True)
-              p.add_argument("--kernel_offset", default="0x00008000")
-              p.add_argument("--pagesize", type=int, default=4096)
-              a = p.parse_args()
-              k = open(a.kernel, "rb").read()
-              page = a.pagesize
-              ko = int(a.kernel_offset, 16)
-              hdr = b"ANDROID!" + struct.pack("<10I", len(k), ko, 0, 0, 0, 0, 0, page, 0, 0)
-              hdr += b"\0" * 16 + b"\0" * 512 + b"\0" * 32   # name, cmdline, id
-              assert len(hdr) == 608
-              img = hdr.ljust(page, b"\0")
-              img += k
-              if len(img) % page:
-                  img += b"\0" * (page - len(img) % page)
-              open(a.out, "wb").write(img)
-              EOF
-              chmod +x /usr/local/bin/mkbootimg
               cd /work/uboot
-              HOSTCFLAGS="-I/tmp/osslshim" ENV_FILE="$PWD/unixnu-sirius.env" ./build.sh
+              HOSTCFLAGS="-I/work/containers/uboot-build" PATH="/work/containers/uboot-build:$PATH" \
+                ENV_FILE="$PWD/unixnu-sirius.env" ./build.sh
             '
 
       - name: Upload U-Boot image
         uses: actions/upload-artifact@v4
         with:
           name: grus-uboot-${{ github.run_number }}
-          path: device/uboot/boot-unixnu.img
+          path: uboot/boot-unixnu.img
           retention-days: 30
           if-no-files-found: error
