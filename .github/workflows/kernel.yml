@@ -215,7 +215,7 @@ jobs:
             -v "${{ github.workspace }}:/work" -w /work \
             unixnu-xnu-linux:local bash -lc '
               set -euo pipefail
-              dnf install -y -q gcc-aarch64-linux-gnu bison flex bc swig openssl-devel >/dev/null
+              dnf install -y -q gcc-aarch64-linux-gnu bison flex bc swig openssl-devel vim-common >/dev/null
               cd /work/uboot
               HOSTCFLAGS="-I/work/containers/uboot-build" PATH="/work/containers/uboot-build:$PATH" \
                 ENV_FILE="$PWD/unixnu-sirius.env" ./build.sh
