@@ -1,0 +1,149 @@
+name: kernel
+
+# grus (Xiaomi Mi 9 SE, SDM710) kernel build on Linux.
+#
+# The XNU kernel is built with the UniXNU Linux toolchain container (Fedora 44 + a patched
+# LLVM, cctools ld64, MIG, iig, lzfse and the xcrun/plutil/codesign shims from
+# scripts/linux of UniXNU). This avoids the macOS + Xcode requirement of the original port and
+# runs on the free GitHub Linux runner.
+
+on:
+  workflow_dispatch:
+    inputs:
+      device_ref:
+        description: Device repository ref (defaults to the ref of this run)
+        required: false
+        default: ""
+      unixnu_ref:
+        description: UniXNU ref to build with
+        required: false
+        default: "main"
+      steps:
+        description: Steps to build
+        type: choice
+        options:
+          - kernel
+          - kernel payload
+        default: "kernel"
+      pre_build:
+        description: Optional shell commands run in the UniXNU checkout before the kernel build
+        required: false
+        default: ""
+  push:
+    branches: [main]
+    paths:
+      - "configs/**"
+      - "board.toml"
+      - "dts/**"
+      - "scripts/**"
+      - "package/**"
+      - "kits/**"
+      - "patches/**"
+      - "drivers/**"
+      - "uboot/**"
+      - "efi/**"
+      - ".github/workflows/kernel.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kernel-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UNIXNU_DEVICE: ${{ github.workspace }}/device
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: Check out UniXNU
+        uses: actions/checkout@v4
+        with:
+          repository: UniXNU/UniXNU
+          ref: ${{ inputs.unixnu_ref || 'main' }}
+          path: unixnu
+          persist-credentials: false
+
+      - name: Check out the device repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.device_ref || github.ref }}
+          path: device
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Build the xnu-linux toolchain container
+        run: |
+          docker build -t unixnu-xnu-linux:local \
+            -f device/containers/xnu-linux/Containerfile \
+            unixnu/scripts/linux
+
+      - name: Select the device
+        working-directory: unixnu
+        run: |
+          ./unixnu defconfig grus_defconfig
+          python3 - <<'PY'
+          import os, tomllib
+          board = tomllib.load(open(os.path.join(os.environ['UNIXNU_DEVICE'], 'board.toml'), 'rb'))
+          print(f"board: {board['board']['name']}")
+          PY
+
+      - name: Run pre-build steps
+        if: inputs.pre_build != ''
+        working-directory: unixnu
+        env:
+          PRE_BUILD: ${{ inputs.pre_build }}
+          DEVICE_DIR: ${{ github.workspace }}/device
+          GITHUB_TOKEN: ${{ github.token }}
+        run: bash -euo pipefail -c "$PRE_BUILD"
+
+      - name: Build kernel (inside the container)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}:/work" -w /work \
+            -e GITHUB_TOKEN="$GITHUB_TOKEN" \
+            -e UNIXNU_DEVICE=/work/device \
+            unixnu-xnu-linux:local bash -lc '
+              set -euo pipefail
+              dnf -y install -q dtc unifdef mtools >/dev/null 2>&1 || true
+              cd unixnu
+              ./unixnu fetch
+              ./unixnu build kernel
+            '
+
+      - name: Build payload
+        working-directory: unixnu
+        if: contains(inputs.steps || 'kernel', 'payload') || contains(github.event.head_commit.message, 'payload')
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: ./unixnu build payload
+
+      - name: Collect artifacts
+        if: always()
+        run: |
+          mkdir -p artifacts
+          work=unixnu/out/grus/ipados-17.7.11-21H461/grus
+          cp "$work"/kernel/kernel.macho artifacts/ 2>/dev/null || true
+          cp "$work"/kernel/kernel.macho.json artifacts/ 2>/dev/null || true
+          cp "$work"/payload/payload.img artifacts/ 2>/dev/null || true
+          cp "$work"/payload/payload.json artifacts/ 2>/dev/null || true
+          cp "$work"/logs/kernel.log artifacts/kernel.log 2>/dev/null || true
+          cp "$work"/logs/*.log artifacts/ 2>/dev/null || true
+          ls -lh artifacts/
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: grus-${{ inputs.steps || 'kernel' }}-${{ github.run_number }}
+          path: artifacts/*
+          retention-days: 3
+          if-no-files-found: error
