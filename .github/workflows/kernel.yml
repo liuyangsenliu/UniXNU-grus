@@ -187,7 +187,7 @@ jobs:
         with:
           repository: 57UU/u-boot
           ref: sirius/v2.0
-          path: device/uboot/src
+          path: uboot/src
 
       - name: Check out UniXNU (for the container sources)
         uses: actions/checkout@v4
