@@ -76,6 +76,13 @@ jobs:
           path: device
           persist-credentials: false
 
+      # The U-Boot submodule pin of 57UU/u-boot was force-pushed away ("not our ref").
+      # The kernel/payload steps never use it (U-Boot only builds the boot image), so drop it.
+      - name: Drop the unused U-Boot submodule
+        run: |
+          git -C device rm --cached uboot/src
+          rm -rf device/uboot/src
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
