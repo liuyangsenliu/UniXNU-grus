@@ -10,13 +10,18 @@
 typedef struct engine_st ENGINE;
 typedef struct ui_method_st UI_METHOD;
 
+void ENGINE_load_builtin_engines(void);
 ENGINE *ENGINE_by_id(const char *id);
+const char *ENGINE_get_id(const ENGINE *e);
 int ENGINE_init(ENGINE *e);
 int ENGINE_finish(ENGINE *e);
 int ENGINE_free(ENGINE *e);
 int ENGINE_set_default_RSA(ENGINE *e);
-int ENGINE_ctrl_cmd_string(ENGINE *e, const char *cmd_name, const void *arg);
+int ENGINE_ctrl_cmd_string(ENGINE *e, const char *cmd_name,
+                           const char *arg, int cmd_optional);
 EVP_PKEY *ENGINE_load_private_key(ENGINE *e, const char *key_id,
                                   UI_METHOD *ui_method, void *callback_data);
+EVP_PKEY *ENGINE_load_public_key(ENGINE *e, const char *key_id,
+                                 UI_METHOD *ui_method, void *callback_data);
 
 #endif
