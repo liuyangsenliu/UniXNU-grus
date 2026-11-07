@@ -20,11 +20,13 @@ diff --git a/arch/arm/lib/crt0_64.S b/arch/arm/lib/crt0_64.S
 diff --git a/common/board_f.c b/common/board_f.c
 --- a/common/board_f.c
 +++ b/common/board_f.c
-@@ -1028,8 +1028,22 @@
- #endif
- }
+@@ -749,8 +749,24 @@
+ /* ARM calls relocate_code from its crt0.S */
+ #if !defined(CONFIG_ARM) && !defined(CONFIG_SANDBOX)
  
-+/* DIAG: proof-of-life paint into the continuous-splash framebuffer (grus) */
++/* DIAG: paint a rectangle into the continuous-splash framebuffer (grus).
++ * 0x9c000000 is cont_splash_region per the stock device tree (36MB, 1080 wide).
++ */
 +static void diag_band(int y0, int y1, unsigned int color)
 +{
 +	volatile unsigned int *fb = (volatile unsigned int *)0x9c000000;
@@ -35,6 +37,16 @@ diff --git a/common/board_f.c b/common/board_f.c
 +			fb[y * 1080 + x] = color;
 +}
 +
+ static int jump_to_copy(void)
+ {
++	/* DIAG: reached relocation (board_init_f sequence finished) */
++	diag_band(450, 560, 0xffff00ff);
++
+ 	if (gd->flags & GD_FLG_SKIP_RELOC)
+ 		return 0;
+ 	/*
+@@ -1030,6 +1046,9 @@
+ 
  void board_init_f(ulong boot_flags)
  {
 +	/* DIAG: board_init_f reached */
@@ -46,11 +58,13 @@ diff --git a/common/board_f.c b/common/board_f.c
 diff --git a/common/board_r.c b/common/board_r.c
 --- a/common/board_r.c
 +++ b/common/board_r.c
-@@ -776,8 +776,49 @@
+@@ -776,8 +776,55 @@
  	INITCALL(run_main_loop);
  }
  
-+/* DIAG: proof-of-life paint into the continuous-splash framebuffer (grus) */
++/* DIAG: paint a rectangle into the continuous-splash framebuffer (grus).
++ * 0x9c000000 is cont_splash_region per the stock device tree (36MB, 1080 wide).
++ */
 +static void diag_band(int y0, int y1, unsigned int color)
 +{
 +	volatile unsigned int *fb = (volatile unsigned int *)0x9c000000;
@@ -62,18 +76,21 @@ diff --git a/common/board_r.c b/common/board_r.c
 +}
 +
 +/* DIAG: one white 70x70 block per *started* board_init_r initcall.
-+ * 10 blocks per row starting at y=600; the block count identifies which
-+ * initcall hung (block N means initcall N was entered and never returned).
++ * 10 blocks per row from y=600. Only armed once board_init_r is entered, so
++ * the same macro used by board_init_f does not touch the framebuffer there.
 + */
 +static int diag_ic_n;
++static int diag_r_ready;
 +
 +void diag_initcall_tick(void)
 +{
 +	volatile unsigned int *fb = (volatile unsigned int *)0x9c000000;
-+	int n = diag_ic_n++;
-+	int x0, y0, x, y;
++	int n, x0, y0, x, y;
 +
-+	if (n < 0 || n >= 65)
++	if (!diag_r_ready)
++		return;
++	n = diag_ic_n++;
++	if (n >= 65)
 +		return;
 +	x0 = 10 + (n % 10) * 100;
 +	y0 = 600 + (n / 10) * 100;
@@ -82,16 +99,17 @@ diff --git a/common/board_r.c b/common/board_r.c
 +			fb[y * 1080 + x] = 0xffffffff;
 +}
 +
-+void diag_initcall_reset(void)
++void diag_initcall_arm(void)
 +{
 +	diag_ic_n = 0;
++	diag_r_ready = 1;
 +}
 +
  void board_init_r(gd_t *new_gd, ulong dest_addr)
  {
 +	/* DIAG: board_init_r reached */
 +	diag_band(300, 450, 0xffffff00);
-+	diag_initcall_reset();
++	diag_initcall_arm();
 +
  	/*
  	 * The pre-relocation drivers may be using memory that has now gone
