@@ -31,7 +31,12 @@ if [ "${GRUS_DIAG:-0}" = "1" ]; then
     python3 "$UBOOT/board/xiaomi/grus/inject-device.py" "$UBOOT/drivers/core/device.c"
   fi
 fi
-echo "=== defconfig + fragments (grus) ==="=
+# grus has no reachable console: autoboot would block on a dead stdin before
+# bootcmd runs. Always run bootcmd unconditionally at the top of main_loop().
+if [ -f "$UBOOT/board/xiaomi/grus/inject-forceboot.py" ]; then
+  echo "=== inject unconditional bootcmd run in main_loop ==="
+  python3 "$UBOOT/board/xiaomi/grus/inject-forceboot.py" "$UBOOT/common/main.c"
+fi
 make -C "$UBOOT" CROSS_COMPILE="$CROSS" O="$OUT" qcom_defconfig qcom-phone.config grus.config
 echo "=== build $DT ==="
 ENV_ARGS=()
