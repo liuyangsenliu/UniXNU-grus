@@ -28,9 +28,16 @@
 
 / {
 	model = "Xiaomi Mi 9 SE (xiaomi-grus)";
-	compatible = "qcom,sdm670-mtp", "qcom,sdm670", "qcom,mtp";
-	qcom,msm-id = <0x360 0 393 0>;
-	qcom,board-id = <35 0>;
+	/* Real grus values read back from the running device:
+	 * /proc/device-tree/qcom,msm-id   = <393 0>
+	 * /proc/device-tree/qcom,board-id = <34 0>
+	 * /proc/device-tree/compatible    = qcom,sdm710-mtp qcom,sdm710 qcom,mtp
+	 * The pyxis template's 35/sdm670 pairing is rejected by ABL
+	 * ("Failed to load/authenticate boot image: Load Error").
+	 */
+	compatible = "qcom,sdm710-mtp", "qcom,sdm710", "qcom,mtp";
+	qcom,msm-id = <393 0>;
+	qcom,board-id = <34 0>;
 	chassis-type = "handset";
 
 	clocks {
