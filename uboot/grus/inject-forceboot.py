@@ -1,31 +1,49 @@
 #!/usr/bin/env python3
-"""Inject an unconditional bootcmd run at the top of main_loop().
+"""Inject a C-level framebuffer paint (plus an early bootcmd run) at the top
+of main_loop().
 
-grus has no reachable console (no UART, vidconsole disabled), so stdin is a
-dead serial device. main_loop() -> autoboot/process_button_cmds() blocks on
-that dead stdin and bootcmd never runs. Patch main_loop to execute bootcmd
-before anything else, so the boot continues without any console input.
+grus has no usable console and the env/bootcmd path proved unreliable, so we
+paint the splash framebuffer (0x9c000000) straight from C:
 
-Idempotent: skips if already injected.
+  rows   0..149  -> white   (main_loop entered)
+  rows 150..199  -> green   (paint helper ran to completion)
+
+No command parsing, no console, no env involved: plain volatile stores. After
+that we still try bootcmd so a working env can continue the boot.
+
+Idempotent.
 """
 import sys
 
 ANCHOR = "void main_loop(void)\n{\n\tconst char *s;\n"
+
 INJECT = """void main_loop(void)
 {
 \tconst char *s;
 
-\t/* grus: no usable console, so autoboot would block on a dead stdin
-\t * before bootcmd ever runs. Run bootcmd unconditionally right here.
-\t */
+\t/* grus: C-level proof-of-life, independent of console/env/commands */
+\t{
+\t\tvolatile unsigned int *fb = (volatile unsigned int *)0x9c000000;
+\t\tint y, x;
+
+\t\tfor (y = 0; y < 150; y++)
+\t\t\tfor (x = 0; x < 1080; x++)
+\t\t\t\tfb[y * 1080 + x] = 0xffffffff;
+\t\tfor (y = 150; y < 200; y++)
+\t\t\tfor (x = 0; x < 1080; x++)
+\t\t\t\tfb[y * 1080 + x] = 0xff00ff00;
+\t}
+
 \tif (env_get("bootcmd"))
 \t\trun_command_list(env_get("bootcmd"), -1, 0);
 """
 
+MARK = "fb[y * 1080 + x] = 0xff00ff00;"
+
 
 def main(path):
     src = open(path, encoding="utf-8", newline="").read()
-    if "run_command_list(env_get(\"bootcmd\"), -1, 0);" in src:
+    if MARK in src:
         print("already injected, skip")
         return 0
     if src.count(ANCHOR) != 1:
@@ -33,7 +51,7 @@ def main(path):
         return 1
     out = src.replace(ANCHOR, INJECT, 1)
     open(path, "w", encoding="utf-8", newline="").write(out)
-    print("injected early bootcmd into", path)
+    print("injected C-level paint + early bootcmd into", path)
     return 0
 
 
