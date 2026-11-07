@@ -20,6 +20,10 @@ if [ -f "$UBOOT/board/xiaomi/grus/diag.patch" ]; then
   echo "=== apply diag.patch (framebuffer proof-of-life bands) ==="
   git -C "$UBOOT" apply -v board/xiaomi/grus/diag.patch
 fi
+if [ -f "$UBOOT/board/xiaomi/grus/inject-main.py" ]; then
+  echo "=== inject main_loop framebuffer progress markers ==="
+  python3 "$UBOOT/board/xiaomi/grus/inject-main.py" "$UBOOT/common/main.c"
+fi
 echo "=== defconfig + fragments (grus) ==="=
 make -C "$UBOOT" CROSS_COMPILE="$CROSS" O="$OUT" qcom_defconfig qcom-phone.config grus.config
 echo "=== build $DT ==="
