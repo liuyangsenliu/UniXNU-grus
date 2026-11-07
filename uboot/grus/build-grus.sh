@@ -37,6 +37,12 @@ if [ -f "$UBOOT/board/xiaomi/grus/inject-forceboot.py" ]; then
   echo "=== inject unconditional bootcmd run in main_loop ==="
   python3 "$UBOOT/board/xiaomi/grus/inject-forceboot.py" "$UBOOT/common/main.c"
 fi
+# Driver-model scan hangs on this port, so keep dm_init() but skip
+# dm_scan()/dm_autoprobe() and the early-timer probe.
+if [ -f "$UBOOT/board/xiaomi/grus/inject-dmskip.py" ]; then
+  echo "=== skip dm scan/autoprobe (grus bring-up) ==="
+  python3 "$UBOOT/board/xiaomi/grus/inject-dmskip.py" "$UBOOT/common/board_r.c"
+fi
 make -C "$UBOOT" CROSS_COMPILE="$CROSS" O="$OUT" qcom_defconfig qcom-phone.config grus.config
 echo "=== build $DT ==="
 ENV_ARGS=()
