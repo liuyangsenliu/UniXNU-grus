@@ -15,9 +15,9 @@ REPL = (
     "\t * (UFS/clock/regulator probes), killing board_init_r before\n"
     "\t * main_loop. Keep dm_init() for uclass/root, skip the scan.\n"
     "\t */\n"
-    "\tret = dm_init();\n"
+    "\tret = dm_init(false);\n"
 )
-MARK = "ret = dm_init();"
+MARK = "ret = dm_init(false);"
 
 
 def main(path):
