@@ -37,6 +37,12 @@ if [ -f "$UBOOT/board/xiaomi/grus/inject-forceboot.py" ]; then
   echo "=== inject unconditional bootcmd run in main_loop ==="
   python3 "$UBOOT/board/xiaomi/grus/inject-forceboot.py" "$UBOOT/common/main.c"
 fi
+# Per-bind driver-name readout: dm_scan() hangs inside some driver's bind(),
+# so paint which driver is being bound and how far that bind got.
+if [ -f "$UBOOT/board/xiaomi/grus/inject-bind.py" ]; then
+  echo "=== inject per-bind driver-name + stage probe (device.c) ==="
+  python3 "$UBOOT/board/xiaomi/grus/inject-bind.py" "$UBOOT/drivers/core/device.c"
+fi
 # Driver-model scan hangs on this port, so keep dm_init() but skip
 # dm_scan()/dm_autoprobe() and the early-timer probe.
 if [ -f "$UBOOT/board/xiaomi/grus/inject-dmskip.py" ]; then

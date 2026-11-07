@@ -1,19 +1,23 @@
 #!/usr/bin/env python3
-"""Driver-model bring-up: bind from the flat DT, probe lazily (grus v29).
+"""Driver-model bring-up for grus: bind from the flat DT, probe lazily (v30).
 
-History of this hook:
-  v26  dm_init(false) and nothing else -> main_loop reached, but no devices
-       were bound at all, so there was no UFS to boot from.
+  v26  dm_init(false) and nothing else -> main_loop reached, but nothing was
+       bound, so there was no UFS to boot from.
   v27  dm_init(CONFIG_IS_ENABLED(OF_LIVE)) + dm_scan_plat + dm_extended_scan
        + dm_scan_other -> never reached main_loop. This .config has
-       CONFIG_OF_LIVE=y, so that expression evaluated to dm_init(true): the
-       flat device tree was converted to a live tree, which is the one
-       difference against the v26 call that demonstrably worked.
-  v29  dm_init(false) (flat tree, exactly like v26) + dm_scan_plat(false) +
-       dm_scan_fdt(false). The extra "/chosen", "/clocks", "/firmware",
-       "/reserved-memory" sweeps of dm_extended_scan are dropped, and
-       dm_autoprobe() stays disabled: a command that needs a device
-       (`scsi scan`) probes just that device's chain on demand.
+       CONFIG_OF_LIVE=y, so that expression evaluated to dm_init(true).
+  v29  dm_init(false) + dm_scan_plat + dm_scan_fdt -> still never reached
+       main_loop (the phone fell back to the stock aboot fastboot). Binding
+       happens inside device_bind_common(), so a driver's bind() or a
+       post_bind hook is what never returns -- see inject-bind.py, which
+       paints the offending driver's name on screen.
+
+v30 keeps the same shape as v29 and adds three status bands so the screen
+says exactly which stage ran:
+
+  y 1000..1039  green  : dm_init(false) returned 0
+  y 1060..1074  cyan   : dm_scan_plat(false) returned
+  y 1080..1094  yellow : dm_scan_fdt(false) returned (bind stage done)
 
 Idempotent.
 """
@@ -21,19 +25,44 @@ import sys
 
 ANCHOR = "\tret = dm_init_and_scan(false);\n"
 REPL = (
-    "\t/* grus v29: flat-tree dm_init (v26 semantics) + bind only.\n"
-    "\t * dm_extended_scan's extra /chosen, /clocks, /firmware and\n"
-    "\t * /reserved-memory sweeps are dropped, and dm_autoprobe() is not\n"
-    "\t * called: `scsi scan` probes the UFS chain on demand instead of\n"
-    "\t * every bound device being probed here at initcall time.\n"
+    "\t/* grus v30: flat-tree dm_init (v26 semantics) + bind only, with\n"
+    "\t * status bands. dm_autoprobe() stays off: a command that needs a\n"
+    "\t * device probes just that chain on demand (scsi scan -> UFS).\n"
     "\t */\n"
     "\tret = dm_init(false);\n"
+    "\t{\n"
+    "\t\tvolatile unsigned int *fb = (volatile unsigned int *)0x9c000000;\n"
+    "\t\tint py, px;\n"
+    "\n"
+    "\t\t/* green: dm_init() came back */\n"
+    "\t\tfor (py = 1000; py < 1040; py++)\n"
+    "\t\t\tfor (px = 0; px < 1080; px++)\n"
+    "\t\t\t\tfb[py * 1080 + px] = 0xff00ff00;\n"
+    "\t}\n"
     "\tif (!ret)\n"
     "\t\tret = dm_scan_plat(false);\n"
+    "\t{\n"
+    "\t\tvolatile unsigned int *fb = (volatile unsigned int *)0x9c000000;\n"
+    "\t\tint py, px;\n"
+    "\n"
+    "\t\t/* cyan: dm_scan_plat() came back */\n"
+    "\t\tfor (py = 1060; py < 1074; py++)\n"
+    "\t\t\tfor (px = 0; px < 1080; px++)\n"
+    "\t\t\t\tfb[py * 1080 + px] = 0xff00ffff;\n"
+    "\t}\n"
     "\tif (!ret)\n"
     "\t\tret = dm_scan_fdt(false);\n"
+    "\t{\n"
+    "\t\tvolatile unsigned int *fb = (volatile unsigned int *)0x9c000000;\n"
+    "\t\tint py, px;\n"
+    "\n"
+    "\t\t/* yellow: dm_scan_fdt() came back (all binds returned) */\n"
+    "\t\tfor (py = 1080; py < 1094; py++)\n"
+    "\t\t\tfor (px = 0; px < 1080; px++)\n"
+    "\t\t\t\tfb[py * 1080 + px] = 0xffffff00;\n"
+    "\t}\n"
 )
-MARK = "grus v29: flat-tree dm_init"
+MARK = "grus v30: flat-tree dm_init"
 
 
 def main(path):
@@ -64,7 +93,7 @@ def main(path):
         print("note: timer anchor count=%d, skipped" % out.count(old_timer),
               file=sys.stderr)
     open(path, "w", encoding="utf-8", newline="").write(out)
-    print("injected flat-tree dm init into", path)
+    print("injected flat-tree dm init + stage bands into", path)
     return 0
 
 
