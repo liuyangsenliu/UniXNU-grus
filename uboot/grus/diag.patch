@@ -1,0 +1,71 @@
+diff --git a/arch/arm/lib/crt0_64.S b/arch/arm/lib/crt0_64.S
+--- a/arch/arm/lib/crt0_64.S
++++ b/arch/arm/lib/crt0_64.S
+@@ -65,6 +65,15 @@
+  */
+ 
+ ENTRY(_main)
++
++	/* DIAG: paint rows 0..149 of the continuous-splash FB blue - proves _main runs */
++	ldr	x9, =0x9c000000
++	ldr	w10, =0xff0000ff
++	ldr	w11, =162000
++diag_crt0_2:
++	str	w10, [x9], #4
++	subs	w11, w11, #1
++	b.ne	diag_crt0_2
+ 
+ /*
+  * Set up initial C runtime environment and call board_init_f(0).
+diff --git a/common/board_f.c b/common/board_f.c
+--- a/common/board_f.c
++++ b/common/board_f.c
+@@ -1028,8 +1028,22 @@
+ #endif
+ }
+ 
++/* DIAG: proof-of-life paint into the continuous-splash framebuffer (grus) */
++static void diag_band(int y0, int y1, unsigned int color)
++{
++	volatile unsigned int *fb = (volatile unsigned int *)0x9c000000;
++	int x, y;
++
++	for (y = y0; y < y1; y++)
++		for (x = 0; x < 270; x++)
++			fb[y * 1080 + x] = color;
++}
++
+ void board_init_f(ulong boot_flags)
+ {
++	/* DIAG: board_init_f reached */
++	diag_band(150, 300, 0xffff0000);
++
+ 	struct board_f boardf;
+ 
+ 	gd->flags = boot_flags;
+diff --git a/common/board_r.c b/common/board_r.c
+--- a/common/board_r.c
++++ b/common/board_r.c
+@@ -776,8 +776,22 @@
+ 	INITCALL(run_main_loop);
+ }
+ 
++/* DIAG: proof-of-life paint into the continuous-splash framebuffer (grus) */
++static void diag_band(int y0, int y1, unsigned int color)
++{
++	volatile unsigned int *fb = (volatile unsigned int *)0x9c000000;
++	int x, y;
++
++	for (y = y0; y < y1; y++)
++		for (x = 0; x < 270; x++)
++			fb[y * 1080 + x] = color;
++}
++
+ void board_init_r(gd_t *new_gd, ulong dest_addr)
+ {
++	/* DIAG: board_init_r reached */
++	diag_band(300, 450, 0xffffff00);
++
+ 	/*
+ 	 * The pre-relocation drivers may be using memory that has now gone
+ 	 * away. Mark serial as unavailable - this will fall back to the debug

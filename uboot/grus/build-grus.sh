@@ -16,7 +16,11 @@ CROSS=${CROSS_COMPILE-$DEF_CROSS}
 JOBS=${JOBS:-$(nproc)}
 DT=${DEVICE_TREE:-qcom/sdm710-xiaomi-grus}
 mkdir -p "$OUT" "$(dirname "$IMG")"
-echo "=== defconfig + fragments (grus) ==="
+if [ -f "$UBOOT/board/xiaomi/grus/diag.patch" ]; then
+  echo "=== apply diag.patch (framebuffer proof-of-life bands) ==="
+  git -C "$UBOOT" apply -v board/xiaomi/grus/diag.patch
+fi
+echo "=== defconfig + fragments (grus) ==="=
 make -C "$UBOOT" CROSS_COMPILE="$CROSS" O="$OUT" qcom_defconfig qcom-phone.config grus.config
 echo "=== build $DT ==="
 ENV_ARGS=()
