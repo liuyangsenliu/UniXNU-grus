@@ -239,6 +239,9 @@ jobs:
           ls -1 "$B" > artifacts/build-ls.txt 2>/dev/null || true
           python3 uboot/grus/dump-initcalls.py "$B/u-boot" aarch64-linux-gnu-objdump \
             > artifacts/initcalls.txt 2>&1 || true
+          grep -rn "INITCALL(" uboot/src --include="*.c" --include="*.h" \
+            | grep -v "include/initcall.h" | grep -v "common/board_r.c" \
+            > artifacts/initcall-uses.txt 2>/dev/null || true
           head -50 artifacts/initcalls.txt || true
 
       - name: Upload U-Boot image

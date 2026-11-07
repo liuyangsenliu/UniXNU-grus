@@ -90,7 +90,7 @@ diff --git a/common/board_r.c b/common/board_r.c
  	int ret;
  
  #ifdef CONFIG_SANDBOX
-@@ -776,8 +783,71 @@
+@@ -776,8 +783,81 @@
  	INITCALL(run_main_loop);
  }
  
@@ -133,18 +133,28 @@ diff --git a/common/board_r.c b/common/board_r.c
 +		0xffffffff, 0xff00ffff, 0xff00ff00, 0xffff8020,
 +		0xff8000ff, 0xff4080ff, 0xff404040
 +	};
-+	int n, x0, y0, x, y;
++	int n, x0, y0, x, y, i;
 +
 +	if (!diag_r_ready)
 +		return;
 +	n = diag_ic_n++;
-+	if (n >= 70)
-+		return;
-+	x0 = 10 + (n % 10) * 100;
-+	y0 = 700 + (n / 10) * 100;
-+	for (y = y0; y < y0 + 70; y++)
-+		for (x = x0; x < x0 + 70; x++)
-+			fb[y * 1080 + x] = dc[n / 10 < 7 ? n / 10 : 6];
++	if (n < 70) {
++		x0 = 10 + (n % 10) * 100;
++		y0 = 700 + (n / 10) * 100;
++		for (y = y0; y < y0 + 70; y++)
++			for (x = x0; x < x0 + 70; x++)
++				fb[y * 1080 + x] = dc[n / 10 < 7 ? n / 10 : 6];
++	}
++	/* DIAG: tick counter as an 8-bit binary readout at the very bottom,
++	 * bit0 leftmost (x=140), bit7 rightmost (x=840), lit = white.
++	 * Redrawn on every tick, so the last value on screen is exact. */
++	for (i = 0; i < 8; i++) {
++		unsigned int c = ((n >> i) & 1) ? 0xffffffff : 0xff101010;
++		int bx = 140 + i * 100;
++		for (y = 2200; y < 2290; y++)
++			for (x = bx; x < bx + 70; x++)
++				fb[y * 1080 + x] = c;
++	}
 +}
 +
 +void diag_initcall_arm(void)
