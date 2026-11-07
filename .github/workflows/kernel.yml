@@ -255,3 +255,91 @@ jobs:
             artifacts/build-ls.txt
           retention-days: 30
           if-no-files-found: error
+
+  efi:
+    # The EDK II half of the boot chain: UniXNU.efi (installed as
+    # \EFI\BOOT\BOOTAA64.EFI on the payload volume) and DarwinBoot.efi (the
+    # grus fork in drivers/DarwinBoot -- GIC-500 pre-configuration and the
+    # INTID 19 timer). `unixnu build payload` only stages the kernel side, so
+    # these two binaries have to be built and copied in separately. No
+    # container: MdePkg-only DSCs on a bare runner.
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Check out the device repository
+        uses: actions/checkout@v4
+
+      - name: Install host tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq build-essential uuid-dev bc bison flex nasm python3 clang lld llvm mtools
+
+      - name: Fetch edk2 (Mu_Basecore)
+        run: |
+          git clone --depth 1 -b release/202608 https://github.com/microsoft/mu_basecore "$GITHUB_WORKSPACE/edk2"
+          git -C edk2 submodule update --init --depth 1 \
+            MdePkg/Library/BaseFdtLib/libfdt \
+            MdePkg/Library/MipiSysTLib/mipisyst \
+            BaseTools/Source/C/BrotliCompress/brotli
+
+      - name: Build UniXNU.efi
+        run: |
+          cd efi
+          UNIXNU_EDK2="$GITHUB_WORKSPACE/edk2" \
+          UNIXNU_BUILD_DIR="$GITHUB_WORKSPACE/efi" \
+            ./build.sh -b RELEASE -t CLANGPDB
+
+      - name: Build DarwinBoot.efi (grus fork)
+        run: |
+          EDK2="$GITHUB_WORKSPACE/edk2"
+          export WORKSPACE="$GITHUB_WORKSPACE/db"
+          export PACKAGES_PATH="$GITHUB_WORKSPACE/drivers/DarwinBoot:$EDK2"
+          export EDK_TOOLS_PATH="$EDK2/BaseTools"
+          export CONF_PATH="$WORKSPACE/Build/Conf"
+          export PYTHON_COMMAND=python3
+          export CLANG_BIN="$(dirname "$(command -v clang)")/"
+          export PATH="$EDK_TOOLS_PATH/BinWrappers/PosixLike:$EDK_TOOLS_PATH/Source/C/bin:$PATH"
+          mkdir -p "$WORKSPACE" "$CONF_PATH"
+          for f in target tools_def build_rule; do cp "$EDK_TOOLS_PATH/Conf/$f.template" "$CONF_PATH/$f.txt"; done
+          build -p DarwinBootPkg/DarwinBoot.dsc -a AARCH64 -b RELEASE -t CLANGPDB -n "$(nproc)"
+
+      - name: Try to grab this run's payload volume
+        id: payload
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          pattern: grus-kernel*
+          path: payload-art
+          merge-multiple: true
+
+      - name: Collect EFI binaries and patch the payload volume
+        run: |
+          set -euo pipefail
+          mkdir -p efi-out
+          cp "$GITHUB_WORKSPACE/efi/Build/Out/AARCH64-RELEASE/UniXNU.efi" efi-out/UniXNU.efi
+          DB=$(find "$GITHUB_WORKSPACE/db" -name 'DarwinBoot.efi' | head -1)
+          test -n "$DB" || { echo "DarwinBoot.efi missing"; exit 1; }
+          cp "$DB" efi-out/DarwinBoot.efi
+          ls -l efi-out
+          if [ -f payload-art/payload.img ]; then
+            mmd -i payload-art/payload.img ::/EFI/BOOT || true
+            mcopy -o -i payload-art/payload.img efi-out/UniXNU.efi ::/EFI/BOOT/BOOTAA64.EFI
+            mcopy -o -i payload-art/payload.img efi-out/DarwinBoot.efi ::/EFI/UniXNU/Payloads/DarwinBoot.efi
+            : > marker
+            mcopy -o -i payload-art/payload.img marker ::/EFI/UniXNU/BOOTUNIXNU
+            mdir -i payload-art/payload.img ::/EFI
+            mdir -i payload-art/payload.img ::/EFI/BOOT
+            mdir -i payload-art/payload.img ::/EFI/UniXNU/Payloads
+          else
+            echo "no payload.img in this run; only the EFI binaries are uploaded"
+          fi
+
+      - name: Upload EFI binaries (and the patched payload, if any)
+        uses: actions/upload-artifact@v4
+        with:
+          name: grus-efi-${{ github.run_number }}
+          path: |
+            efi-out/*
+            payload-art/payload.img
+          retention-days: 14
+          if-no-files-found: warn
