@@ -225,7 +225,7 @@ jobs:
               dnf install -y -q gcc-aarch64-linux-gnu bison flex bc swig openssl-devel vim-common gnutls-devel libuuid-devel >/dev/null
               cd /work/uboot/src
               HOSTCFLAGS="-I/work/containers/uboot-build" PATH="/work/containers/uboot-build:$PATH" \
-                ENV_FILE="/work/uboot/grus/grus.env" IMG="/work/uboot/grus-boot-unixnu.img" ./build-grus.sh
+                ENV_FILE="/work/uboot/grus/grus.env" IMG="/work/uboot/grus-boot-unixnu.img" bash ./build-grus.sh
             '
 
       - name: Upload U-Boot image
