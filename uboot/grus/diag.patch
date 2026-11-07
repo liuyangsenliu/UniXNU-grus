@@ -157,10 +157,14 @@ diff --git a/common/board_r.c b/common/board_r.c
 +	}
 +}
 +
++void diag_probe_arm(void);
++
 +void diag_initcall_arm(void)
 +{
 +	diag_ic_n = 0;
 +	diag_r_ready = 1;
++	/* arm the per-device probe counter injected into drivers/core/device.c */
++	diag_probe_arm();
 +}
 +
  void board_init_r(gd_t *new_gd, ulong dest_addr)
