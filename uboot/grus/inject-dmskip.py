@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
-"""Skip dm_scan()/dm_autoprobe() in initr_dm().
+"""Lazy driver-model bring-up: bind everything, probe nothing (grus v27).
 
-On grus the driver-model scan hangs (no UFS/clock/regulator bring-up in this
-port), which kills board_init_r before main_loop ever runs. Keep dm_init() so
-uclass/root structures stay valid, but skip the scan and autoprobe stages.
+v26 proved main_loop is reachable when the DM scan is skipped entirely --
+but that also skips binding, so there is no UFS device to boot from.
+The full dm_autoprobe() (probe every bound device at initcall time) is
+what stalls this port. v27 keeps the binding stages (the exact body of
+root.c's static dm_scan(), via its public pieces) but drops the
+autoprobe: devices are probed lazily, on demand, when a command actually
+touches them (scsi scan -> UFS chain only). Unrelated devices that hung
+the autoprobe are never probed at all.
 
 Idempotent.
 """
@@ -11,18 +16,25 @@ import sys
 
 ANCHOR = "\tret = dm_init_and_scan(false);\n"
 REPL = (
-    "\t/* grus bring-up: dm_scan()/dm_autoprobe() never return on this port\n"
-    "\t * (UFS/clock/regulator probes), killing board_init_r before\n"
-    "\t * main_loop. Keep dm_init() for uclass/root, skip the scan.\n"
+    "\t/* grus v27: bind all devices (dm_scan_plat + dm_extended_scan +\n"
+    "\t * dm_scan_other) but skip the autoprobe stage. Probing every device\n"
+    "\t * at initcall time stalls the port; lazy probing on demand\n"
+    "\t * (scsi scan -> UFS chain) avoids it.\n"
     "\t */\n"
-    "\tret = dm_init(false);\n"
+    "\tret = dm_init(CONFIG_IS_ENABLED(OF_LIVE));\n"
+    "\tif (!ret)\n"
+    "\t\tret = dm_scan_plat(false);\n"
+    "\tif (!ret)\n"
+    "\t\tret = dm_extended_scan(false);\n"
+    "\tif (!ret)\n"
+    "\t\tret = dm_scan_other(false);\n"
 )
-MARK = "ret = dm_init(false);"
+MARK = "grus v27: bind all devices"
 
 
 def main(path):
     src = open(path, encoding="utf-8").read()  # universal newlines
-    if "dm_scan()/dm_autoprobe() never return" in src:
+    if MARK in src:
         print("already injected, skip")
         return 0
     if src.count(ANCHOR) != 1:
@@ -38,7 +50,8 @@ def main(path):
         return 1
     out = out.replace(old_tail, new_tail, 1)
 
-    # initr_dm_devices() probes the early timer, which also hangs on this port.
+    # initr_dm_devices() probes the early timer, which also hangs on this
+    # port. Neutralise it: lib/time.c probes the timer lazily on first use.
     old_timer = "\tif (IS_ENABLED(CONFIG_TIMER_EARLY)) {\n\t\tret = dm_timer_init();\n"
     new_timer = "\tif (0) {\n\t\tret = dm_timer_init();\n"
     if out.count(old_timer) == 1:
@@ -47,7 +60,7 @@ def main(path):
         print("note: timer anchor count=%d, skipped" % out.count(old_timer),
               file=sys.stderr)
     open(path, "w", encoding="utf-8", newline="").write(out)
-    print("injected dm scan skip into", path)
+    print("injected lazy dm scan into", path)
     return 0
 
 
