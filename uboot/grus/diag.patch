@@ -1,28 +1,44 @@
 diff --git a/arch/arm/lib/crt0_64.S b/arch/arm/lib/crt0_64.S
 --- a/arch/arm/lib/crt0_64.S
 +++ b/arch/arm/lib/crt0_64.S
-@@ -65,6 +65,15 @@
-  */
+@@ -66,6 +66,15 @@
  
  ENTRY(_main)
-+
-+	/* DIAG: paint rows 0..149 of the continuous-splash FB blue - proves _main runs */
+ 
++	/* DIAG: rows 0..149 of the splash FB -> blue: _main is executing */
 +	ldr	x9, =0x9c000000
 +	ldr	w10, =0xff0000ff
 +	ldr	w11, =162000
-+diag_crt0_2:
++diag_blu:
 +	str	w10, [x9], #4
 +	subs	w11, w11, #1
-+	b.ne	diag_crt0_2
- 
++	b.ne	diag_blu
++
  /*
   * Set up initial C runtime environment and call board_init_f(0).
+  */
+@@ -96,6 +105,15 @@
+ 
+ 	mov	x0, #0
+ 	bl	board_init_f
++
++	/* DIAG: rows 470..494 -> magenta: board_init_f() returned, about to relocate */
++	ldr	x9, =0x9c1efc40
++	ldr	w10, =0xffff00ff
++	ldr	w11, =27000
++diag_mag:
++	str	w10, [x9], #4
++	subs	w11, w11, #1
++	b.ne	diag_mag
+ 
+ #if !defined(CONFIG_XPL_BUILD)
+ /*
 diff --git a/common/board_f.c b/common/board_f.c
 --- a/common/board_f.c
 +++ b/common/board_f.c
-@@ -749,8 +749,24 @@
- /* ARM calls relocate_code from its crt0.S */
- #if !defined(CONFIG_ARM) && !defined(CONFIG_SANDBOX)
+@@ -1028,8 +1028,24 @@
+ #endif
+ }
  
 +/* DIAG: paint a rectangle into the continuous-splash framebuffer (grus).
 + * 0x9c000000 is cont_splash_region per the stock device tree (36MB, 1080 wide).
@@ -37,16 +53,6 @@ diff --git a/common/board_f.c b/common/board_f.c
 +			fb[y * 1080 + x] = color;
 +}
 +
- static int jump_to_copy(void)
- {
-+	/* DIAG: reached relocation (board_init_f sequence finished) */
-+	diag_band(450, 560, 0xffff00ff);
-+
- 	if (gd->flags & GD_FLG_SKIP_RELOC)
- 		return 0;
- 	/*
-@@ -1030,6 +1046,9 @@
- 
  void board_init_f(ulong boot_flags)
  {
 +	/* DIAG: board_init_f reached */
@@ -58,7 +64,7 @@ diff --git a/common/board_f.c b/common/board_f.c
 diff --git a/common/board_r.c b/common/board_r.c
 --- a/common/board_r.c
 +++ b/common/board_r.c
-@@ -776,8 +776,55 @@
+@@ -776,8 +776,56 @@
  	INITCALL(run_main_loop);
  }
  
@@ -76,8 +82,9 @@ diff --git a/common/board_r.c b/common/board_r.c
 +}
 +
 +/* DIAG: one white 70x70 block per *started* board_init_r initcall.
-+ * 10 blocks per row from y=600. Only armed once board_init_r is entered, so
-+ * the same macro used by board_init_f does not touch the framebuffer there.
++ * 10 blocks per row from y=700; block N identifies the initcall that hung.
++ * Armed only once board_init_r is entered, so the shared INITCALL macro does
++ * not touch the framebuffer during board_init_f.
 + */
 +static int diag_ic_n;
 +static int diag_r_ready;
@@ -93,7 +100,7 @@ diff --git a/common/board_r.c b/common/board_r.c
 +	if (n >= 65)
 +		return;
 +	x0 = 10 + (n % 10) * 100;
-+	y0 = 600 + (n / 10) * 100;
++	y0 = 700 + (n / 10) * 100;
 +	for (y = y0; y < y0 + 70; y++)
 +		for (x = x0; x < x0 + 70; x++)
 +			fb[y * 1080 + x] = 0xffffffff;
