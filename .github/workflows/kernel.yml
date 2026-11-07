@@ -193,7 +193,7 @@ jobs:
         run: |
           cp uboot/grus/sdm710-xiaomi-grus.dts uboot/src/dts/upstream/src/arm64/qcom/
           mkdir -p uboot/src/board/xiaomi/grus
-          cp uboot/grus/grus.config uboot/grus/grus.env uboot/grus/diag.patch uboot/grus/inject-main.py uboot/src/board/xiaomi/grus/
+          cp uboot/grus/grus.config uboot/grus/grus.env uboot/grus/diag.patch uboot/grus/inject-main.py uboot/grus/inject-device.py uboot/src/board/xiaomi/grus/
           cp uboot/grus/build-grus.sh uboot/src/
 
       - name: Check out UniXNU (for the container sources)

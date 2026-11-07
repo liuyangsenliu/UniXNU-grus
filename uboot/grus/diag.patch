@@ -90,7 +90,7 @@ diff --git a/common/board_r.c b/common/board_r.c
  	int ret;
  
  #ifdef CONFIG_SANDBOX
-@@ -776,8 +783,81 @@
+@@ -776,8 +783,85 @@
  	INITCALL(run_main_loop);
  }
  
