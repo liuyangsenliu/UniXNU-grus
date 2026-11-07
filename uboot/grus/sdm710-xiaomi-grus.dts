@@ -66,21 +66,20 @@
 	chosen {
 		// No access to UART...
 		stdout-path = "framebuffer";
-	};
 
-	/* U-Boot's driver model walks the tree from the root and only descends
-	 * into bus nodes, so a simple-framebuffer sitting under /chosen is never
-	 * bound and vidconsole never registers. Keep the node at the root (Linux
-	 * accepts both spellings).
-	 */
-	framebuffer: framebuffer@9c000000 {
-		compatible = "simple-framebuffer";
-		reg = <0 0x9c000000 0 (1080 * 2340 * 4)>;
-		width = <1080>;
-		height = <2340>;
-		stride = <(1080 * 4)>;
-		format = "a8r8g8b8";
-		status = "okay";
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		framebuffer: framebuffer@9c000000 {
+			compatible = "simple-framebuffer";
+			reg = <0 0x9c000000 0 (1080 * 2340 * 4)>;
+			width = <1080>;
+			height = <2340>;
+			stride = <(1080 * 4)>;
+			format = "a8r8g8b8";
+			status = "okay";
+		};
 	};
 
 	reserved-memory {
