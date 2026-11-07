@@ -72,17 +72,34 @@ static void diag_probe_tick(const char *nm)
 	diag_probe_paint(nm, diag_probe_n++);
 }
 
-/* milestone bars: 7 vertical bars right of the name block */
+/* fail-path error code: cyan 8-bit binary of ret at y=2240 (bit0 leftmost) */
+static void diag_probe_fail(int ret)
+{
+	volatile unsigned int *fb = (volatile unsigned int *)0x9c000000;
+	int i, x, y;
+
+	for (i = 0; i < 8; i++) {
+		unsigned int c = ((ret >> i) & 1) ? 0xff00ffff : 0xff101010;
+		int bx = 140 + i * 100;
+
+		for (y = 2240; y < 2320; y++)
+			for (x = bx; x < bx + 70; x++)
+				fb[y * 1080 + x] = c;
+	}
+}
+
+/* milestone bars: 8 vertical bars right of the name block; 7=gold means
+ * device_notify(EVT_DM_POST_PROBE) returned 0 and probe is about to return */
 static void diag_probe_stage(int stage)
 {
 	volatile unsigned int *fb = (volatile unsigned int *)0x9c000000;
-	static const unsigned int sc[7] = {
+	static const unsigned int sc[8] = {
 		0xffffffff, 0xffffff00, 0xffff00ff, 0xffff8000,
-		0xff00ff00, 0xff0000ff, 0xffff0000
+		0xff00ff00, 0xff0000ff, 0xffff0000, 0xffffc000
 	};
 	int i, x, y;
 
-	for (i = 0; i < 7; i++) {
+	for (i = 0; i < 8; i++) {
 		unsigned int c = (i == stage) ? sc[i] : 0xff101010;
 		int by = 1830 + i * 50;
 
@@ -102,6 +119,8 @@ STAGES = [
     ("S4", "\tif (drv->probe) {"),
     ("S5", "\tret = uclass_post_probe_device(dev);"),
     ("S6", "\tret = device_notify(dev, EVT_DM_POST_PROBE);"),
+    # gold bar: notify returned 0, success path, about to return 0
+    ("S7", "\treturn 0;\nfail_event:"),
 ]
 
 
@@ -134,8 +153,16 @@ def main():
             return 1
         out = out.replace(a, stage_call(n) + a, 1)
 
+    # fail-path: paint the error code so a failing probe shows ret on screen
+    fail_anchor = "\nfail:\n\tdev_bic_flags(dev, DM_FLAG_ACTIVATED);"
+    fail_call = "\n\tif (diag_probe_ready)\n\t\tdiag_probe_fail(ret);"
+    if out.count(fail_anchor) != 1:
+        print(f"FATAL: fail anchor count={out.count(fail_anchor)}", file=sys.stderr)
+        return 1
+    out = out.replace(fail_anchor, fail_call + fail_anchor, 1)
+
     open(path, "w", encoding="utf-8", newline="").write(out)
-    print("injected probe counter + name readout + 7 milestone bars into", path)
+    print("injected probe counter + name readout + 8 milestone bars + fail readout into", path)
     return 0
 
 
