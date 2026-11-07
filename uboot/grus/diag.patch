@@ -46,7 +46,7 @@ diff --git a/common/board_f.c b/common/board_f.c
 diff --git a/common/board_r.c b/common/board_r.c
 --- a/common/board_r.c
 +++ b/common/board_r.c
-@@ -776,8 +776,22 @@
+@@ -776,8 +776,49 @@
  	INITCALL(run_main_loop);
  }
  
@@ -61,11 +61,53 @@ diff --git a/common/board_r.c b/common/board_r.c
 +			fb[y * 1080 + x] = color;
 +}
 +
++/* DIAG: one white 70x70 block per *started* board_init_r initcall.
++ * 10 blocks per row starting at y=600; the block count identifies which
++ * initcall hung (block N means initcall N was entered and never returned).
++ */
++static int diag_ic_n;
++
++void diag_initcall_tick(void)
++{
++	volatile unsigned int *fb = (volatile unsigned int *)0x9c000000;
++	int n = diag_ic_n++;
++	int x0, y0, x, y;
++
++	if (n < 0 || n >= 65)
++		return;
++	x0 = 10 + (n % 10) * 100;
++	y0 = 600 + (n / 10) * 100;
++	for (y = y0; y < y0 + 70; y++)
++		for (x = x0; x < x0 + 70; x++)
++			fb[y * 1080 + x] = 0xffffffff;
++}
++
++void diag_initcall_reset(void)
++{
++	diag_ic_n = 0;
++}
++
  void board_init_r(gd_t *new_gd, ulong dest_addr)
  {
 +	/* DIAG: board_init_r reached */
 +	diag_band(300, 450, 0xffffff00);
++	diag_initcall_reset();
 +
  	/*
  	 * The pre-relocation drivers may be using memory that has now gone
  	 * away. Mark serial as unavailable - this will fall back to the debug
+diff --git a/include/initcall.h b/include/initcall.h
+--- a/include/initcall.h
++++ b/include/initcall.h
+@@ -12,8 +12,11 @@
+ 
+ _Static_assert(EVT_COUNT < 256, "Can only support 256 event types with 8 bits");
+ 
++void diag_initcall_tick(void);
++
+ #define INITCALL(_call) \
+ 	do { \
++		diag_initcall_tick(); \
+ 		if (_call()) { \
+ 			printf("%s(): initcall %s() failed\n", __func__, \
+ 			       #_call); \
