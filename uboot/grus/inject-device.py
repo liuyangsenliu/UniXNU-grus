@@ -1,22 +1,26 @@
 #!/usr/bin/env python3
-"""Inject a per-device probe counter into U-Boot's drivers/core/device.c.
+"""Inject a per-device probe counter + device-name readout into U-Boot's
+drivers/core/device.c.
 
 grus has no UART; the ABL splash framebuffer at 0x9c000000 is the only output
-channel. board_init_r freezes nondeterministically inside the DM scan/probe
-initcall, so paint one 8-bit binary readout (cyan lit blocks, y=2100) per
-device_probe() entry, armed only after relocation. Whatever value stays on
-screen is the number of probes that STARTED; the hang is inside probe #N
-(0-based: the probe that started but never returned).
+channel. board_init_r freezes deterministically inside the DM scan/probe
+initcall with probe counter frozen at 3 (device #4), so besides the 8-bit
+cyan counter (y=2100) each device_probe() now also paints the first 5
+characters of dev->name as 5 rows of 8-bit ASCII (orange lit blocks,
+y=1830.., bit0 leftmost), redrawn on every probe. Whatever stays on screen
+when the boot hangs names the driver that hung.
 
 Usage: inject-device.py <path-to-drivers/core/device.c>
 """
 import sys
 
 HELPER = """
-/* DIAG (grus): per-probe framebuffer counter. Cyan 8-bit binary readout at
- * y=2100, bit0 leftmost. Armed from board_init_r (post-relocation) via
- * diag_probe_arm(); every device_probe() entry redraws it, so the value left
- * on screen when the boot freezes is the index of the probe that hung.
+/* DIAG (grus): per-probe framebuffer counter + device-name readout.
+ * Cyan 8-bit binary counter at y=2100, bit0 leftmost. Orange 5x8 ASCII
+ * readout of dev->name[0..4] at y=1830 (row = char, bit0 leftmost).
+ * Armed from board_init_r (post-relocation) via diag_probe_arm(); every
+ * device_probe() entry redraws both, so the value left on screen when the
+ * boot freezes is the probe index and the name of the device that hung.
  */
 static int diag_probe_n;
 static int diag_probe_ready;
@@ -27,12 +31,27 @@ void diag_probe_arm(void)
 	diag_probe_ready = 1;
 }
 
-static void diag_probe_tick(void)
+static void diag_probe_paint(const char *nm, int n)
 {
 	volatile unsigned int *fb = (volatile unsigned int *)0x9c000000;
-	int i, x, y;
-	int n = diag_probe_n++;
+	int r, i, x, y;
 
+	/* device name: 5 rows of 8-bit ASCII, orange lit */
+	for (r = 0; r < 5; r++) {
+		unsigned char ch = (nm && nm[r]) ? (unsigned char)nm[r] : 0;
+
+		for (i = 0; i < 8; i++) {
+			unsigned int c = ((ch >> i) & 1) ? 0xff2080ff : 0xff101010;
+			int bx = 140 + i * 100;
+			int by = 1830 + r * 50;
+
+			for (y = by; y < by + 40; y++)
+				for (x = bx; x < bx + 70; x++)
+					fb[y * 1080 + x] = c;
+		}
+	}
+
+	/* probe counter: cyan 8-bit binary at y=2100 */
 	for (i = 0; i < 8; i++) {
 		unsigned int c = ((n >> i) & 1) ? 0xff00ffff : 0xff101010;
 		int bx = 140 + i * 100;
@@ -41,6 +60,13 @@ static void diag_probe_tick(void)
 			for (x = bx; x < bx + 70; x++)
 				fb[y * 1080 + x] = c;
 	}
+}
+
+static void diag_probe_tick(const char *nm)
+{
+	if (!diag_probe_ready)
+		return;
+	diag_probe_paint(nm, diag_probe_n++);
 }
 
 """
@@ -59,11 +85,11 @@ def main():
               file=sys.stderr)
         return 1
 
-    call = "\n\tif (diag_probe_ready)\n\t\tdiag_probe_tick();\n"
+    call = "\n\tif (diag_probe_ready)\n\t\tdiag_probe_tick(dev->name);\n"
     out = src.replace(anchor, HELPER + anchor + call, 1)
 
     open(path, "w", encoding="utf-8", newline="").write(out)
-    print("injected per-probe counter into", path)
+    print("injected per-probe counter + name readout into", path)
     return 0
 
 
