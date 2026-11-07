@@ -74,12 +74,15 @@ diff --git a/common/board_f.c b/common/board_f.c
 diff --git a/common/board_r.c b/common/board_r.c
 --- a/common/board_r.c
 +++ b/common/board_r.c
-@@ -569,6 +569,12 @@
+@@ -567,8 +567,15 @@
+ 	return 0;
+ }
  
++/* DIAG fwd */
++static void diag_band_full(int y0, int y1, unsigned int color);
++
  static int run_main_loop(void)
  {
-+
-+static void diag_band_full(int y0, int y1, unsigned int color);
 +
 +	/* DIAG: run_main_loop reached - full-width green rows 640..690 */
 +	diag_band_full(640, 690, 0xff00ff00);
@@ -87,7 +90,7 @@ diff --git a/common/board_r.c b/common/board_r.c
  	int ret;
  
  #ifdef CONFIG_SANDBOX
-@@ -776,8 +782,71 @@
+@@ -776,8 +783,71 @@
  	INITCALL(run_main_loop);
  }
  
