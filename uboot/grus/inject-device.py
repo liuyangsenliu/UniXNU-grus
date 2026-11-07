@@ -1,27 +1,30 @@
 #!/usr/bin/env python3
-"""Inject a per-device probe counter + device-name readout into U-Boot's
-drivers/core/device.c.
+"""Inject per-probe diagnostics into U-Boot's drivers/core/device.c.
 
 grus has no UART; the ABL splash framebuffer at 0x9c000000 is the only output
-channel. board_init_r freezes deterministically inside the DM scan/probe
-initcall with probe counter frozen at 3 (device #4), so besides the 8-bit
-cyan counter (y=2100) each device_probe() now also paints the first 5
-characters of dev->name as 5 rows of 8-bit ASCII (orange lit blocks,
-y=1830.., bit0 leftmost), redrawn on every probe. Whatever stays on screen
-when the boot hangs names the driver that hung.
+channel. board_init_r freezes inside DM init with probe counter frozen at 3
+and the last probed device named "root_...", so besides the cyan 8-bit probe
+counter (y=2100) and the orange 5x8 ASCII name readout (y=1830, x=140..850)
+this injects 7 colour milestone bars on the right of the name block
+(x=880..950, y=1830+i*50) that show how far the CURRENT device_probe() got:
+
+  stage 0 (white)   : entered device_probe()
+  stage 1 (yellow)  : device_of_to_plat() done
+  stage 2 (magenta) : parent chain probed
+  stage 3 (orange)  : pinctrl default state done
+  stage 4 (green)   : clk_set_defaults() done
+  stage 5 (blue)    : drv->probe() returned
+  stage 6 (red)     : post-probe / POST_PROBE notify done, about to return
+
+Only the bar of the current stage is lit; entering a probe repaints all 7.
+The bar left on screen when the boot hangs is the stage that hung.
 
 Usage: inject-device.py <path-to-drivers/core/device.c>
 """
 import sys
 
 HELPER = """
-/* DIAG (grus): per-probe framebuffer counter + device-name readout.
- * Cyan 8-bit binary counter at y=2100, bit0 leftmost. Orange 5x8 ASCII
- * readout of dev->name[0..4] at y=1830 (row = char, bit0 leftmost).
- * Armed from board_init_r (post-relocation) via diag_probe_arm(); every
- * device_probe() entry redraws both, so the value left on screen when the
- * boot freezes is the probe index and the name of the device that hung.
- */
+/* DIAG (grus): per-probe framebuffer diagnostics. See file header comment. */
 static int diag_probe_n;
 static int diag_probe_ready;
 
@@ -69,7 +72,41 @@ static void diag_probe_tick(const char *nm)
 	diag_probe_paint(nm, diag_probe_n++);
 }
 
+/* milestone bars: 7 vertical bars right of the name block */
+static void diag_probe_stage(int stage)
+{
+	volatile unsigned int *fb = (volatile unsigned int *)0x9c000000;
+	static const unsigned int sc[7] = {
+		0xffffffff, 0xffffff00, 0xffff00ff, 0xffff8000,
+		0xff00ff00, 0xff0000ff, 0xffff0000
+	};
+	int i, x, y;
+
+	for (i = 0; i < 7; i++) {
+		unsigned int c = (i == stage) ? sc[i] : 0xff101010;
+		int by = 1830 + i * 50;
+
+		for (y = by; y < by + 40; y++)
+			for (x = 880; x < 950; x++)
+				fb[y * 1080 + x] = c;
+	}
+}
+
 """
+
+STAGES = [
+    # (name, unique anchor in device_probe(); stage call inserted BEFORE anchor)
+    ("S1", "\tret = device_of_to_plat(dev);\n\tif (ret)\n\t\tgoto fail;"),
+    ("S2", "\tdev_or_flags(dev, DM_FLAG_ACTIVATED);"),
+    ("S3", "\tif (CONFIG_IS_ENABLED(IOMMU) && dev->parent &&"),
+    ("S4", "\tif (drv->probe) {"),
+    ("S5", "\tret = uclass_post_probe_device(dev);"),
+    ("S6", "\tret = device_notify(dev, EVT_DM_POST_PROBE);"),
+]
+
+
+def stage_call(n):
+    return "\tif (diag_probe_ready)\n\t\tdiag_probe_stage(%d);\n" % n
 
 
 def main():
@@ -85,11 +122,20 @@ def main():
               file=sys.stderr)
         return 1
 
-    call = "\n\tif (diag_probe_ready)\n\t\tdiag_probe_tick(dev->name);\n"
+    call = ("\n\tif (diag_probe_ready) {\n\t\tdiag_probe_tick(dev->name);\n"
+            "\t\tdiag_probe_stage(0);\n\t}\n")
     out = src.replace(anchor, HELPER + anchor + call, 1)
 
+    for name, a in STAGES:
+        n = int(name[1])
+        if out.count(a) != 1:
+            print(f"FATAL: stage {name} anchor not unique: count={out.count(a)}",
+                  file=sys.stderr)
+            return 1
+        out = out.replace(a, stage_call(n) + a, 1)
+
     open(path, "w", encoding="utf-8", newline="").write(out)
-    print("injected per-probe counter + name readout into", path)
+    print("injected probe counter + name readout + 7 milestone bars into", path)
     return 0
 
 
