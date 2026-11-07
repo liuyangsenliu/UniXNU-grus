@@ -40,6 +40,21 @@
 	qcom,board-id = <34 0>;
 	chassis-type = "handset";
 
+	/* The sdm710.dtsi memory node carries size 0 and relies on XBL to patch
+	 * it at boot. U-Boot reads it in dram_init() to pick its relocation
+	 * address, so a zero size makes it relocate outside DRAM and reset
+	 * before USB comes up. Write the size the running device reports:
+	 *   /proc/device-tree/memory/reg =
+	 *     00000000 80000000 00000000 80000000
+	 *     00000001 00000000 00000000 fd6c0000
+	 * i.e. two contiguous banks, 6 GiB minus the top 0x2940000 that XBL
+	 * keeps for hyp/ramdump -- the same value sirius.dts uses.
+	 */
+	memory@80000000 {
+		device_type = "memory";
+		reg = <0x0 0x80000000 0x1 0x7d6c0000>;
+	};
+
 	clocks {
 		int_cdc_bclk: int-cdc-bclk {
 			compatible = "fixed-clock";
