@@ -232,6 +232,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: grus-uboot-${{ github.run_number }}
-          path: uboot/grus-boot-unixnu.img
+          path: |
+            uboot/grus-boot-unixnu.img
+            uboot/src/.config
           retention-days: 30
           if-no-files-found: error

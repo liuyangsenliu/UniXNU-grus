@@ -22,7 +22,7 @@ diff --git a/arch/arm/lib/crt0_64.S b/arch/arm/lib/crt0_64.S
  	mov	x0, #0
  	bl	board_init_f
 +
-+	/* DIAG: rows 470..494 -> magenta: board_init_f() returned, about to relocate */
++	/* DIAG: rows 469..476 -> magenta: board_init_f() returned, about to relocate */
 +	ldr	x9, =0x9c1efc40
 +	ldr	w10, =0xffff00ff
 +	ldr	w11, =27000
@@ -36,7 +36,7 @@ diff --git a/arch/arm/lib/crt0_64.S b/arch/arm/lib/crt0_64.S
 diff --git a/common/board_f.c b/common/board_f.c
 --- a/common/board_f.c
 +++ b/common/board_f.c
-@@ -1028,8 +1028,24 @@
+@@ -1028,8 +1028,34 @@
  #endif
  }
  
@@ -53,6 +53,16 @@ diff --git a/common/board_f.c b/common/board_f.c
 +			fb[y * 1080 + x] = color;
 +}
 +
++static void diag_band_full(int y0, int y1, unsigned int color)
++{
++	volatile unsigned int *fb = (volatile unsigned int *)0x9c000000;
++	int x, y;
++
++	for (y = y0; y < y1; y++)
++		for (x = 0; x < 1080; x++)
++			fb[y * 1080 + x] = color;
++}
++
  void board_init_f(ulong boot_flags)
  {
 +	/* DIAG: board_init_f reached */
@@ -64,7 +74,17 @@ diff --git a/common/board_f.c b/common/board_f.c
 diff --git a/common/board_r.c b/common/board_r.c
 --- a/common/board_r.c
 +++ b/common/board_r.c
-@@ -776,8 +776,56 @@
+@@ -569,6 +569,9 @@
+ 
+ static int run_main_loop(void)
+ {
++	/* DIAG: run_main_loop reached - full-width green rows 640..690 */
++	diag_band_full(640, 690, 0xff00ff00);
++
+ 	int ret;
+ 
+ #ifdef CONFIG_SANDBOX
+@@ -776,8 +779,71 @@
  	INITCALL(run_main_loop);
  }
  
@@ -81,10 +101,21 @@ diff --git a/common/board_r.c b/common/board_r.c
 +			fb[y * 1080 + x] = color;
 +}
 +
-+/* DIAG: one white 70x70 block per *started* board_init_r initcall.
-+ * 10 blocks per row from y=700; block N identifies the initcall that hung.
-+ * Armed only once board_init_r is entered, so the shared INITCALL macro does
-+ * not touch the framebuffer during board_init_f.
++static void diag_band_full(int y0, int y1, unsigned int color)
++{
++	volatile unsigned int *fb = (volatile unsigned int *)0x9c000000;
++	int x, y;
++
++	for (y = y0; y < y1; y++)
++		for (x = 0; x < 1080; x++)
++			fb[y * 1080 + x] = color;
++}
++
++/* DIAG: one 70x70 block per *started* board_init_r initcall.
++ * 10 blocks per row from y=700; the COLOR encodes the decade:
++ *   0-9 white, 10-19 cyan, 20-29 green, 30-39 orange, 40-49 purple,
++ *   50-59 pink, 60+ gray. The last block's color + column = the index.
++ * Armed only once board_init_r is entered.
 + */
 +static int diag_ic_n;
 +static int diag_r_ready;
@@ -92,18 +123,22 @@ diff --git a/common/board_r.c b/common/board_r.c
 +void diag_initcall_tick(void)
 +{
 +	volatile unsigned int *fb = (volatile unsigned int *)0x9c000000;
++	static const unsigned int dc[7] = {
++		0xffffffff, 0xff00ffff, 0xff00ff00, 0xffff8020,
++		0xff8000ff, 0xff4080ff, 0xff404040
++	};
 +	int n, x0, y0, x, y;
 +
 +	if (!diag_r_ready)
 +		return;
 +	n = diag_ic_n++;
-+	if (n >= 65)
++	if (n >= 70)
 +		return;
 +	x0 = 10 + (n % 10) * 100;
 +	y0 = 700 + (n / 10) * 100;
 +	for (y = y0; y < y0 + 70; y++)
 +		for (x = x0; x < x0 + 70; x++)
-+			fb[y * 1080 + x] = 0xffffffff;
++			fb[y * 1080 + x] = dc[n / 10 < 7 ? n / 10 : 6];
 +}
 +
 +void diag_initcall_arm(void)
@@ -114,8 +149,8 @@ diff --git a/common/board_r.c b/common/board_r.c
 +
  void board_init_r(gd_t *new_gd, ulong dest_addr)
  {
-+	/* DIAG: board_init_r reached */
-+	diag_band(300, 450, 0xffffff00);
++	/* DIAG: board_init_r reached - full-width yellow rows 300..360 */
++	diag_band_full(300, 360, 0xffffff00);
 +	diag_initcall_arm();
 +
  	/*
