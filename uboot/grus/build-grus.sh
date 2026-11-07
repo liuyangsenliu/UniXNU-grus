@@ -24,6 +24,10 @@ if [ -f "$UBOOT/board/xiaomi/grus/inject-main.py" ]; then
   echo "=== inject main_loop framebuffer progress markers ==="
   python3 "$UBOOT/board/xiaomi/grus/inject-main.py" "$UBOOT/common/main.c"
 fi
+if [ -f "$UBOOT/board/xiaomi/grus/inject-device.py" ]; then
+  echo "=== inject per-device probe counter (device.c) ==="
+  python3 "$UBOOT/board/xiaomi/grus/inject-device.py" "$UBOOT/drivers/core/device.c"
+fi
 echo "=== defconfig + fragments (grus) ==="=
 make -C "$UBOOT" CROSS_COMPILE="$CROSS" O="$OUT" qcom_defconfig qcom-phone.config grus.config
 echo "=== build $DT ==="
