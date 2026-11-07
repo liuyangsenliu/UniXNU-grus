@@ -228,12 +228,27 @@ jobs:
                 ENV_FILE="/work/uboot/grus/grus.env" IMG="/work/uboot/grus-boot-unixnu.img" bash ./build-grus.sh
             '
 
+      - name: Dump initcall order and real .config
+        if: always()
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq binutils-aarch64-linux-gnu
+          B=uboot/src/workspace/build/uboot-grus
+          mkdir -p artifacts
+          cp "$B/.config" artifacts/dot-config 2>/dev/null || true
+          ls -1 "$B" > artifacts/build-ls.txt 2>/dev/null || true
+          python3 uboot/grus/dump-initcalls.py "$B/u-boot" aarch64-linux-gnu-objdump \
+            > artifacts/initcalls.txt 2>&1 || true
+          head -50 artifacts/initcalls.txt || true
+
       - name: Upload U-Boot image
         uses: actions/upload-artifact@v4
         with:
           name: grus-uboot-${{ github.run_number }}
           path: |
             uboot/grus-boot-unixnu.img
-            uboot/src/.config
+            artifacts/initcalls.txt
+            artifacts/dot-config
+            artifacts/build-ls.txt
           retention-days: 30
           if-no-files-found: error
