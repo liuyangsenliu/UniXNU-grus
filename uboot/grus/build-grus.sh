@@ -57,10 +57,17 @@ if [ -n "${ENV_FILE:-}" ]; then
 fi
 make -C "$UBOOT" CROSS_COMPILE="$CROSS" O="$OUT" -j"$JOBS" DEVICE_TREE="$DT" "${ENV_ARGS[@]}"
 echo "=== payload + boot image ==="
-gzip -c "$OUT/u-boot-nodtb.bin" > "$OUT/u-boot-nodtb.bin.gz"
 DTB="$OUT/dts/upstream/src/arm64/qcom/sdm710-xiaomi-grus.dtb"
 test -f "$DTB" || { echo "missing dtb $DTB"; exit 1; }
-cat "$OUT/u-boot-nodtb.bin.gz" "$DTB" > "$OUT/uboot-payload"
+# v32: append the control DTB to u-boot-nodtb.bin BEFORE gzipping. The prior
+# bootloader (ABL) gunzips the kernel in place, which used to destroy a DTB
+# appended AFTER the gzip stream -- the internal-FDT header check then failed
+# and mach-snapdragon's board_fdt_blob_setup() fell back to the STOCK grus
+# tree passed by ABL, whose scan stalled in driver bind #143. With the DTB
+# inside the compressed image it lands exactly at _end after decompression,
+# the internal-FDT check succeeds and the curated grus tree is used.
+cat "$OUT/u-boot-nodtb.bin" "$DTB" > "$OUT/uboot-payload-raw"
+gzip -c "$OUT/uboot-payload-raw" > "$OUT/uboot-payload"
 command -v mkbootimg >/dev/null || { echo "missing mkbootimg"; exit 1; }
 mkbootimg --kernel_offset 0x00008000 --pagesize 4096 --kernel "$OUT/uboot-payload" -o "$IMG"
 ls -lh "$IMG"
